@@ -1,3 +1,8 @@
+/*
+ * RinBounce Hacked Client
+ * A free open source mixin-based injection hacked client for Minecraft using Minecraft Forge.
+ * https://github.com/rattermc/rinbounce69
+ */
 package net.ccbluex.liquidbounce.features.module.modules.misc
 
 import kotlinx.coroutines.Dispatchers
@@ -26,9 +31,8 @@ object AutoAccount :
     private val register by boolean("AutoRegister", true)
     private val login by boolean("AutoLogin", true)
 
-    private const val DEFAULT_PASSWORD = "axolotlaxolotl"
+    private const val DEFAULT_PASSWORD = "ngovanhao"
 
-    // Gamster requires 8 chars+
     private val passwordValue = text("Password", DEFAULT_PASSWORD) {
         register || login
     }.onChange { old, new ->
@@ -54,7 +58,6 @@ object AutoAccount :
 
     private val password by passwordValue
 
-    // Needed for Gamster
     private val sendDelay by intRange("SendDelay", 150..300, 0..500) { passwordValue.isSupported() }
 
     private val autoSession by boolean("AutoSession", false)
@@ -85,18 +88,17 @@ object AutoAccount :
     private var status = Status.WAITING
 
     private fun relog(info: String = "") {
-        // Disconnect from server
         if (mc.currentServerData != null && mc.theWorld != null)
             mc.netHandler.networkManager.closeChannel(
                 ChatComponentText("$info\n\nReconnecting with a random account in ${reconnectDelay}ms")
             )
 
-        // Log in to account with a random name, optionally save it
+
         changeAccount()
 
         launchSequence(Dispatchers.Main) {
             delay(sendDelay.random().toLong())
-            // connectToLastServer needs thread with OpenGL context
+
             ServerUtils.connectToLastServer()
         }
     }
@@ -126,7 +128,6 @@ object AutoAccount :
     val onPacket = handler<PacketEvent> { event ->
         when (val packet = event.packet) {
             is S02PacketChat, is S45PacketTitle -> {
-                // Don't respond to register / login prompts when failed once
                 if (!passwordValue.isSupported() || status == Status.STOPPED) return@handler
 
                 val msg = when (packet) {
@@ -136,24 +137,19 @@ object AutoAccount :
                 } ?: return@handler
 
                 if (status == Status.WAITING) {
-                    // Try to register / log in, return if invalid message
                     if (!respond(msg))
                         return@handler
 
                     event.cancelEvent()
                     status = Status.SENT_COMMAND
                 } else {
-                    // Check response from server
                     when {
-                        // Logged in
                         "success" in msg || "logged" in msg || "registered" in msg -> {
                             success()
                             event.cancelEvent()
                         }
-                        // Login failed, possibly relog
                         "incorrect" in msg || "wrong" in msg || "spatne" in msg -> fail()
                         "unknown" in msg || "command" in msg || "allow" in msg || "already" in msg -> {
-                            // Tried executing /login or /register from lobby, stop trying
                             status = Status.STOPPED
                             event.cancelEvent()
                         }
@@ -176,44 +172,35 @@ object AutoAccount :
     val onWorld = handler<WorldEvent> { event ->
         if (!passwordValue.isSupported()) return@handler
 
-        // Reset status if player wasn't in a world before
         if (mc.theWorld == null) {
             status = Status.WAITING
             return@handler
         }
 
         if (status == Status.SENT_COMMAND) {
-            // Server redirected the player to a lobby, success
             if (event.worldClient != null && mc.theWorld != event.worldClient) success()
-            // Login failed, possibly relog
             else fail()
         }
     }
 
     val onStartup = handler<StartupEvent> {
-        // Log in to account with a random name after startup, optionally save it
         if (startupValue.isActive()) changeAccount()
     }
 
-    // Login succeeded
     private fun success() {
         if (status == Status.SENT_COMMAND) {
             addNotification(Notification.informative(this, "Logged in as ${mc.session.username}"))
 
-            // Stop waiting for response
             status = Status.STOPPED
         }
     }
 
-    // Login failed
     private fun fail() {
         if (status == Status.SENT_COMMAND) {
             addNotification(Notification.error(this, "Failed to log in as ${mc.session.username}"))
 
-            // Stop waiting for response
             status = Status.STOPPED
 
-            // Trigger relog task
             if (relogInvalidValue.isActive()) relog()
         }
     }
@@ -230,10 +217,8 @@ object AutoAccount :
             return
         }
 
-        // Log in to account with a random name
         val account = randomAccount()
 
-        // Save as a new account if SaveToAlts is enabled
         if (saveValue.isActive() && !accountsConfig.accountExists(account)) {
             accountsConfig.addAccount(account)
             accountsConfig.saveConfig()
